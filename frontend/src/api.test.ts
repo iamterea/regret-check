@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, evaluateRepo, fetchRateLimit } from "./api";
+import { ApiError, evaluateRepo, evaluateRepos, fetchRateLimit } from "./api";
 
 function stubFetch(status: number, body: unknown) {
   const fetchMock = vi.fn(async (_url: string) => ({ ok: status < 400, status, json: async () => body }));
@@ -46,5 +46,23 @@ describe("api", () => {
   it("reads the rate limit", async () => {
     stubFetch(200, { limit: 60, remaining: 12, reset_at: "2030-03-17T17:46:40Z" });
     await expect(fetchRateLimit()).resolves.toEqual({ limit: 60, remaining: 12, reset_at: "2030-03-17T17:46:40Z" });
+  });
+
+  it("evaluates several repositories and keeps each failure with its repository", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("ghost")
+          ? {
+              ok: false,
+              status: 404,
+              json: async () => ({ error: "not_found", message: "acme/ghost does not exist or is private." }),
+            }
+          : { ok: true, status: 200, json: async () => ({ repo: { full_name: "acme/widget" } }) },
+      ),
+    );
+    const outcomes = await evaluateRepos(["acme/widget", "acme/ghost"]);
+    expect(outcomes[0]).toMatchObject({ fullName: "acme/widget", evaluation: { repo: { full_name: "acme/widget" } } });
+    expect(outcomes[1]).toMatchObject({ fullName: "acme/ghost", error: { code: "not_found" } });
   });
 });

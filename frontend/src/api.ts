@@ -42,3 +42,20 @@ export function evaluateRepo(fullName: string): Promise<Evaluation> {
 export function fetchRateLimit(): Promise<RateLimit> {
   return getJson<RateLimit>("/api/rate-limit");
 }
+
+export type Outcome = { fullName: string; evaluation: Evaluation } | { fullName: string; error: ApiError };
+
+/** Evaluate several repositories in parallel; one failure does not hide the others. */
+export function evaluateRepos(fullNames: string[]): Promise<Outcome[]> {
+  return Promise.all(
+    fullNames.map((fullName) =>
+      evaluateRepo(fullName).then(
+        (evaluation): Outcome => ({ fullName, evaluation }),
+        (error: unknown): Outcome => ({
+          fullName,
+          error: error instanceof ApiError ? error : new ApiError("network", "Something went wrong."),
+        }),
+      ),
+    ),
+  );
+}

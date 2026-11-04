@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRepo } from "./parseRepo";
+import { parseRepo, parseRepos } from "./parseRepo";
 
 describe("parseRepo", () => {
   it.each([
@@ -20,4 +20,34 @@ describe("parseRepo", () => {
       expect(parseRepo(input)).toBeNull();
     },
   );
+});
+
+describe("parseRepos", () => {
+  it("reads one repository", () => {
+    expect(parseRepos("django/django")).toEqual({ repos: ["django/django"] });
+  });
+
+  it("reads several separated by commas, spaces and new lines", () => {
+    expect(parseRepos("moment/moment, https://github.com/date-fns/date-fns\niamkun/dayjs")).toEqual({
+      repos: ["moment/moment", "date-fns/date-fns", "iamkun/dayjs"],
+    });
+  });
+
+  it("drops duplicates, ignoring case", () => {
+    expect(parseRepos("a/b A/B https://github.com/a/b")).toEqual({ repos: ["a/b"] });
+  });
+
+  it("names the part that is not a repository", () => {
+    expect(parseRepos("a/b nope")).toEqual({
+      error: '"nope" is not a GitHub repository. Use owner/name or paste its URL.',
+    });
+  });
+
+  it("asks for input when empty", () => {
+    expect(parseRepos("   ")).toEqual({ error: "Enter a GitHub repository as owner/name or paste its URL." });
+  });
+
+  it("limits a comparison to four repositories", () => {
+    expect(parseRepos("a/a b/b c/c d/d e/e")).toEqual({ error: "Compare at most 4 repositories at a time." });
+  });
 });

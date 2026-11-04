@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { parseRepo } from "../parseRepo";
+import { MAX_COMPARE, parseRepos } from "../parseRepo";
 
 const EXAMPLES = [
   { repo: "django/django", note: "very active" },
@@ -8,8 +8,10 @@ const EXAMPLES = [
   { repo: "atom/atom", note: "archived" },
 ];
 
+const COMPARE_EXAMPLE = ["moment/moment", "date-fns/date-fns", "iamkun/dayjs", "moment/luxon"];
+
 interface Props {
-  onSubmit: (fullName: string) => void;
+  onSubmit: (fullNames: string[]) => void;
   disabled: boolean;
 }
 
@@ -19,19 +21,19 @@ export function RepoForm({ onSubmit, disabled }: Props) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const fullName = parseRepo(text);
-    if (!fullName) {
-      setError("Enter a GitHub repository as owner/name or paste its URL.");
+    const parsed = parseRepos(text);
+    if ("error" in parsed) {
+      setError(parsed.error);
       return;
     }
     setError(null);
-    onSubmit(fullName);
+    onSubmit(parsed.repos);
   }
 
-  function pickExample(repo: string) {
-    setText(repo);
+  function pick(repos: string[]) {
+    setText(repos.join(", "));
     setError(null);
-    onSubmit(repo);
+    onSubmit(repos);
   }
 
   return (
@@ -42,16 +44,19 @@ export function RepoForm({ onSubmit, disabled }: Props) {
           id="repo"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="owner/name or https://github.com/owner/name"
+          placeholder="owner/name, or several to compare"
           autoComplete="off"
           spellCheck={false}
           aria-invalid={error !== null}
-          aria-describedby={error ? "repo-error" : undefined}
+          aria-describedby={error ? "repo-hint repo-error" : "repo-hint"}
         />
         <button type="submit" disabled={disabled}>
           Check
         </button>
       </div>
+      <p id="repo-hint" className="form-hint">
+        One repository, or up to {MAX_COMPARE} separated by spaces or commas to compare them side by side.
+      </p>
       {error && (
         <p id="repo-error" className="form-error" role="alert">
           {error}
@@ -60,10 +65,13 @@ export function RepoForm({ onSubmit, disabled }: Props) {
       <p className="examples">
         Try:
         {EXAMPLES.map(({ repo, note }) => (
-          <button key={repo} type="button" className="chip" disabled={disabled} onClick={() => pickExample(repo)}>
+          <button key={repo} type="button" className="chip" disabled={disabled} onClick={() => pick([repo])}>
             {repo} <span className="chip__note">{note}</span>
           </button>
         ))}
+        <button type="button" className="chip chip--compare" disabled={disabled} onClick={() => pick(COMPARE_EXAMPLE)}>
+          Compare date libraries <span className="chip__note">4 repos</span>
+        </button>
       </p>
     </form>
   );
