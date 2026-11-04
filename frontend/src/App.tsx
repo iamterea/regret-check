@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, evaluateRepo, evaluateRepos, fetchRateLimit, type Outcome } from "./api";
 import { ComparisonTable } from "./components/ComparisonTable";
 import { RateLimitNote } from "./components/RateLimitNote";
 import { RepoForm } from "./components/RepoForm";
 import { SignalCard } from "./components/SignalCard";
 import { VerdictBanner } from "./components/VerdictBanner";
-import { formatDateTime, formatTime } from "./format";
+import { describeError } from "./errors";
+import { formatDateTime } from "./format";
 import type { Evaluation, RateLimit, Status } from "./types";
 
 type State =
@@ -95,10 +96,23 @@ function Comparison({
   onSelect: (fullName: string) => void;
 }) {
   const chosen = outcomes.find((outcome) => outcome.fullName === selected);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (selected) heading.current?.focus();
+  }, [selected]);
+
   return (
     <>
-      <ComparisonTable outcomes={outcomes} onShowDetails={onSelect} />
-      {chosen && "evaluation" in chosen && <Result evaluation={chosen.evaluation} />}
+      <ComparisonTable outcomes={outcomes} selected={selected} onShowDetails={onSelect} />
+      {chosen && "evaluation" in chosen && (
+        <section className="details" aria-labelledby="details-title">
+          <h2 id="details-title" tabIndex={-1} ref={heading}>
+            Details: {chosen.evaluation.repo.full_name}
+          </h2>
+          <Result evaluation={chosen.evaluation} />
+        </section>
+      )}
     </>
   );
 }
@@ -124,13 +138,9 @@ function Result({ evaluation }: { evaluation: Evaluation }) {
 }
 
 function ErrorMessage({ error }: { error: ApiError }) {
-  const text =
-    error.code === "rate_limited" && error.resetAt
-      ? `Not enough GitHub requests left for a new check (one needs up to 4). The limit resets at ${formatTime(error.resetAt)}. Repositories checked recently still work.`
-      : error.message;
   return (
     <p className="error" role="alert">
-      {text}
+      {describeError(error)}
     </p>
   );
 }

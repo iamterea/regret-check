@@ -174,4 +174,38 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Show details for acme/widget" }));
     expect(await screen.findByRole("heading", { level: 2, name: "Medium regret risk" })).toBeInTheDocument();
   });
+
+  it("labels stale and rate-limited columns, links GitHub's name and moves focus to the details", async () => {
+    const gadget: Evaluation = {
+      ...EVALUATION,
+      repo: { ...EVALUATION.repo, full_name: "acme/gadget", html_url: "https://github.com/acme/gadget" },
+      verdict: { level: "low", headline: "Low regret risk", reasons: [] },
+    };
+    stubCompareApi({
+      "acme/widget": { status: 200, body: { ...EVALUATION, meta: { ...EVALUATION.meta, stale: true } } },
+      "acme/gadget": { status: 200, body: gadget },
+      "acme/ghost": {
+        status: 429,
+        body: { error: "rate_limited", message: "Rate limited.", reset_at: "2030-03-17T17:46:40Z" },
+      },
+    });
+    const user = await renderApp();
+
+    await user.type(screen.getByLabelText("GitHub repository"), "acme/widget acme/gadget acme/ghost");
+    await user.click(screen.getByRole("button", { name: "Check" }));
+
+    await screen.findByRole("table");
+    expect(screen.getByRole("link", { name: "acme/gadget" })).toHaveAttribute("href", "https://github.com/acme/gadget");
+    expect(screen.getByText(/^Cached /)).toBeInTheDocument();
+    expect(screen.getByText(/The limit resets at/)).toHaveTextContent(formatTime("2030-03-17T17:46:40Z"));
+    expect(screen.getByText("Grouped by regret risk, lowest first")).toBeInTheDocument();
+
+    const button = screen.getByRole("button", { name: "Show details for acme/widget" });
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    await user.click(button);
+
+    expect(await screen.findByRole("heading", { level: 2, name: "Details: acme/widget" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Show details for acme/widget" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Show details for acme/widget" })).toHaveTextContent("Showing details");
+  });
 });

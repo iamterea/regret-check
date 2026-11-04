@@ -346,6 +346,18 @@ button:disabled {
   margin-top: 4px;
 }
 
+.comparison__note {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.details h2 {
+  margin: 24px 0 8px;
+  font-size: 1.1rem;
+}
+
 .comparison__error {
   color: var(--risk);
 }
