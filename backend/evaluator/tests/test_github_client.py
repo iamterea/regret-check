@@ -138,6 +138,35 @@ def test_rate_limit_failure_is_a_github_error(memory_cache):
 
 
 @responses.activate
+def test_non_json_200_without_a_cached_copy_raises(memory_cache):
+    responses.add(responses.GET, REPO_URL, body="<html>not json</html>", status=200, content_type="text/html")
+    with pytest.raises(GitHubError):
+        make_client(memory_cache).get("/repos/acme/widget")
+
+
+@responses.activate
+def test_non_json_200_falls_back_to_the_stale_copy(memory_cache):
+    clock = FakeClock()
+    responses.add(responses.GET, REPO_URL, json={"v": "old"})
+    make_client(memory_cache, clock).get("/repos/acme/widget")
+
+    clock.now += 7200
+    responses.reset()
+    responses.add(responses.GET, REPO_URL, body="<html>captive portal</html>", status=200, content_type="text/html")
+    client = make_client(memory_cache, clock)
+
+    assert client.get("/repos/acme/widget") == {"v": "old"}
+    assert client.served_stale is True
+
+
+@responses.activate
+def test_rate_limit_with_an_unexpected_body_is_a_github_error(memory_cache):
+    responses.add(responses.GET, f"{API}/rate_limit", json={"unexpected": True})
+    with pytest.raises(GitHubError):
+        make_client(memory_cache).rate_limit()
+
+
+@responses.activate
 def test_cached_returns_an_old_copy_without_a_request(memory_cache):
     clock = FakeClock()
     responses.add(responses.GET, REPO_URL, json={"v": 1})

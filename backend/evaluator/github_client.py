@@ -93,7 +93,11 @@ class GitHubClient:
             return self._fall_back(entry, GitHubError(f"Could not reach GitHub: {exc}"))
         self.requests_made += 1
         if response.status_code == 200:
-            entry = {"data": response.json(), "fetched_at": self._clock()}
+            try:
+                data = response.json()
+            except ValueError as exc:
+                return self._fall_back(entry, GitHubError(f"GitHub returned a non-JSON body for {path}: {exc}"))
+            entry = {"data": data, "fetched_at": self._clock()}
             self._cache.set(key, entry, timeout=KEEP_SECONDS)
             return self._use(entry)
         if response.status_code == 404:
@@ -109,8 +113,11 @@ class GitHubClient:
             response.raise_for_status()
         except requests.RequestException as exc:
             raise GitHubError(f"Could not read the rate limit: {exc}") from exc
-        core = response.json()["resources"]["core"]
-        return RateLimit(core["limit"], core["remaining"], datetime.fromtimestamp(core["reset"], tz=timezone.utc))
+        try:
+            core = response.json()["resources"]["core"]
+            return RateLimit(core["limit"], core["remaining"], datetime.fromtimestamp(core["reset"], tz=timezone.utc))
+        except (ValueError, KeyError, TypeError) as exc:
+            raise GitHubError(f"Could not read the rate limit: {exc}") from exc
 
     def _is_fresh(self, entry: dict) -> bool:
         return self._clock() - entry["fetched_at"] < self._ttl
