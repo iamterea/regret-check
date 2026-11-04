@@ -25,6 +25,9 @@ def _endpoints(full_name: str) -> dict[str, tuple[str, dict | None]]:
 def evaluate(full_name: str, client: GitHubClient, now: datetime) -> dict:
     endpoints = _endpoints(full_name)
     budget = client.rate_limit()
+    # An upper bound: the issues call is counted even for repos with issues disabled, because
+    # that is only known after the repo call. Over-counting can refuse at exactly 3 remaining;
+    # under-counting could spend calls and then fail.
     needed = sum(not client.is_fresh(path, params) for path, params in endpoints.values())
     # Not enough budget for the uncached calls: answer from the cache or not at all,
     # rather than spend half the calls and then fail.

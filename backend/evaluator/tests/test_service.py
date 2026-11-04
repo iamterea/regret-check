@@ -82,3 +82,14 @@ def test_low_budget_without_a_cache_refuses_before_spending(memory_cache):
         evaluate("acme/widget", make_client(memory_cache, FakeClock()), NOW)
 
     assert [call.request.url for call in responses.calls] == [f"{API}/rate_limit"]
+
+
+@responses.activate
+def test_budget_check_counts_the_issues_call_before_it_knows_issues_are_disabled(memory_cache):
+    mock_rate_limit(remaining=3)
+    responses.add(responses.GET, f"{API}/repos/acme/widget", json=make_repo(has_issues=False))
+
+    with pytest.raises(RateLimited):
+        evaluate("acme/widget", make_client(memory_cache, FakeClock()), NOW)
+
+    assert [call.request.url for call in responses.calls] == [f"{API}/rate_limit"]

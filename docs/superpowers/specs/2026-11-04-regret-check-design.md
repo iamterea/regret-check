@@ -55,7 +55,7 @@ Measured on 2026-11-04 against the live API: an unauthenticated conditional requ
 
 - **Cost:** one evaluation makes at most 4 requests (repo, commits, releases, issues; issues is skipped when the repo has issues disabled). That is about 15 fresh evaluations per hour.
 - **Fresh cache:** each GitHub response is cached by URL. Within `GITHUB_CACHE_TTL_SECONDS` (default 3600) it is served with no request at all.
-- **Budget pre-check:** before fetching, the backend reads `/rate_limit` (free) and counts the requests it would actually make (URLs without a fresh cache entry). If the budget is short, the evaluation runs offline: every URL must come from the cache (fresh or stale), otherwise the API returns `429` with the reset time. An evaluation never spends half its calls and then fails.
+- **Budget pre-check:** before fetching, the backend reads `/rate_limit` (free) and counts the requests it may need (URLs without a fresh cache entry; the issues call is counted even when the repo turns out to have issues disabled, since that is only known after fetching the repo). If the budget is short, the evaluation runs offline: every URL must come from the cache (fresh or stale), otherwise the API returns `429` with the reset time. An evaluation never spends half its calls and then fails.
 - **Stale fallback:** cache entries are kept for 7 days. If GitHub reports the limit exhausted mid-evaluation (another client on the same IP), the older cached copy is used. Any stale copy marks the whole response `stale`. With no copy, the API returns `429` with the reset time.
 - **Visible budget:** the UI shows the remaining requests and the reset time, from a free `/api/rate-limit` call on load and from every evaluation response.
 
