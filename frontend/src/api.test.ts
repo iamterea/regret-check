@@ -23,6 +23,14 @@ describe("api", () => {
     });
   });
 
+  it("explains an empty error response, as when the backend is down", async () => {
+    stubFetch(502, null);
+    await expect(evaluateRepo("acme/widget")).rejects.toMatchObject({
+      code: "network",
+      message: "The server did not answer. Is the backend running?",
+    });
+  });
+
   it("reports a network failure as an ApiError", async () => {
     vi.stubGlobal(
       "fetch",

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { formatTime } from "./format";
 import type { Evaluation } from "./types";
 
 const RATE_LIMIT = { limit: 60, remaining: 56, reset_at: "2030-03-17T17:46:40Z" };
@@ -67,11 +68,11 @@ describe("App", () => {
   });
 
   it("explains when GitHub's hourly limit is used up", async () => {
-    stubApi({
+    const fetchMock = stubApi({
       status: 429,
       body: {
         error: "rate_limited",
-        message: "GitHub's hourly request limit is used up.",
+        message: "Not enough GitHub requests left for a new check.",
         reset_at: "2030-03-17T17:46:40Z",
       },
     });
@@ -79,7 +80,11 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: /django\/django/ }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/60 requests an hour is used up/);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Not enough GitHub requests left for a new check (one needs up to 4).");
+    expect(alert).toHaveTextContent(formatTime("2030-03-17T17:46:40Z"));
+    const rateLimitCalls = fetchMock.mock.calls.filter(([input]) => String(input).startsWith("/api/rate-limit"));
+    expect(rateLimitCalls).toHaveLength(2);
   });
 
   it("warns when the result comes from an old cached copy", async () => {
@@ -88,7 +93,30 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: /django\/django/ }));
 
-    expect(await screen.findByText(/Showing cached data from/)).toBeInTheDocument();
+    expect(await screen.findByText(/Showing cached data from/)).toHaveTextContent(
+      "fresh data from GitHub wasn't available.",
+    );
+  });
+
+  it("says so when two signals lack data", async () => {
+    const unknown = (id: string, label: string) => ({ ...EVALUATION.signals[0], id, label, status: "unknown" as const });
+    const evaluation = { ...EVALUATION, signals: [...EVALUATION.signals, unknown("issues", "Issue response"), unknown("releases", "Releases")] };
+    stubApi({ status: 200, body: evaluation });
+    const user = await renderApp();
+
+    await user.click(screen.getByRole("button", { name: /django\/django/ }));
+
+    expect(await screen.findByText(/Limited evidence: Issue response, Releases had too little data/)).toBeInTheDocument();
+  });
+
+  it("shows no limited-evidence caveat when signals have data", async () => {
+    stubApi({ status: 200, body: EVALUATION });
+    const user = await renderApp();
+
+    await user.click(screen.getByRole("button", { name: /django\/django/ }));
+
+    await screen.findByRole("heading", { level: 2, name: "Medium regret risk" });
+    expect(screen.queryByText(/Limited evidence/)).not.toBeInTheDocument();
   });
 
   it("rejects text that is not a repository without calling the API", async () => {

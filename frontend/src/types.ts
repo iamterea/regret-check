@@ -20,5 +20,5 @@ export interface Evaluation {
   repo: { full_name: string; description: string; html_url: string; stars: number };
   verdict: { level: Level; headline: string; reasons: string[] };
   signals: Signal[];
-  meta: { data_as_of: string; stale: boolean; rate_limit: RateLimit };
+  meta: { data_as_of: string; stale: boolean; rate_limit: RateLimit | null };
 }

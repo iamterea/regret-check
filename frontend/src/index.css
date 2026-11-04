@@ -197,6 +197,12 @@ button:disabled {
   margin: 8px 0 0;
 }
 
+.verdict__caveat {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 .signals {
   display: grid;
   gap: 12px;

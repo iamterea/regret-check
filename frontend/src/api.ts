@@ -22,6 +22,10 @@ async function getJson<T>(url: string): Promise<T> {
   }
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    if (!body?.error) {
+      // For example the dev proxy's empty 502 while Django is stopped.
+      throw new ApiError("network", "The server did not answer. Is the backend running?");
+    }
     throw new ApiError(
       body?.error ?? "github_error",
       body?.message ?? `Request failed with status ${response.status}.`,

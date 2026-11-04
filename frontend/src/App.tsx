@@ -29,9 +29,11 @@ export default function App() {
     setState({ kind: "loading", fullName });
     try {
       const evaluation = await evaluateRepo(fullName);
-      setRateLimit(evaluation.meta.rate_limit);
+      if (evaluation.meta.rate_limit) setRateLimit(evaluation.meta.rate_limit);
       setState({ kind: "done", evaluation });
     } catch (error) {
+      // The budget call is free; refresh it so the note agrees with the error.
+      fetchRateLimit().then(setRateLimit).catch(() => undefined);
       setState({
         kind: "error",
         error: error instanceof ApiError ? error : new ApiError("network", "Something went wrong."),
@@ -64,7 +66,7 @@ function Result({ evaluation }: { evaluation: Evaluation }) {
     <>
       {evaluation.meta.stale && (
         <p className="notice" role="status">
-          Showing cached data from {formatDateTime(evaluation.meta.data_as_of)}: GitHub's hourly limit is used up.
+          Showing cached data from {formatDateTime(evaluation.meta.data_as_of)}: fresh data from GitHub wasn't available.
         </p>
       )}
       <VerdictBanner evaluation={evaluation} />
@@ -80,7 +82,7 @@ function Result({ evaluation }: { evaluation: Evaluation }) {
 function ErrorMessage({ error }: { error: ApiError }) {
   const text =
     error.code === "rate_limited" && error.resetAt
-      ? `GitHub's free limit of 60 requests an hour is used up. It resets at ${formatTime(error.resetAt)}. Repositories checked recently still work.`
+      ? `Not enough GitHub requests left for a new check (one needs up to 4). The limit resets at ${formatTime(error.resetAt)}. Repositories checked recently still work.`
       : error.message;
   return (
     <p className="error" role="alert">
