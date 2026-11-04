@@ -89,8 +89,9 @@ def license_signal(repo: dict) -> Signal:
             "license",
             "License",
             RISK,
-            "None",
-            "No license detected. Without one you have no legal right to use the code.",
+            "Not detected",
+            "GitHub didn't recognise a license here. Check the repository's LICENSE file or its package page "
+            "before adopting: with no license at all you have no right to use the code.",
             url,
         )
     spdx = license_info.get("spdx_id") or "NOASSERTION"
@@ -167,12 +168,15 @@ def bus_factor_signal(repo: dict, commits: list[dict], now: datetime) -> Signal:
         # One person behind every recent commit is the regret Simfoni named, however few commits there are.
         author, total = counts.most_common(1)[0]
         written = "the only commit" if total == 1 else f"all {total} commits"
+        detail = "One person wrote every commit in the last year. If they step away, nobody else knows the code."
+        if total < MIN_SAMPLE:
+            detail += f" Only {total} {'commit' if total == 1 else 'commits'} in the last year, so the evidence is thin."
         return Signal(
             "bus_factor",
             "Bus factor",
             RISK,
             f"{author} wrote {written}",
-            "One person wrote every commit in the last year. If they step away, nobody else knows the code.",
+            detail,
             url,
         )
     if len(authors) < MIN_SAMPLE:
@@ -304,8 +308,9 @@ def build_signals(
     ]
 
 
-# Archived, unlicensed, or carried by one person: Simfoni's "single person" regret is a dealbreaker too.
-DEALBREAKERS = frozenset({"status", "license", "bus_factor"})
+# Archived, or carried by one person (Simfoni's regret). A license GitHub can't recognise is a risk to verify,
+# not a dealbreaker: it often means a non-standard license file.
+DEALBREAKERS = frozenset({"status", "bus_factor"})
 HEADLINES = {"low": "Low regret risk", "medium": "Medium regret risk", "high": "High regret risk"}
 
 

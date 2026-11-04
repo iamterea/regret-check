@@ -38,6 +38,12 @@ def test_license_rules(license_info, expected):
     assert license_signal(make_repo(license=license_info)).status == expected
 
 
+def test_unrecognised_license_is_shown_as_not_detected():
+    signal = license_signal(make_repo(license=None))
+    assert signal.value == "Not detected"
+    assert "Check the repository's LICENSE file" in signal.detail
+
+
 def test_custom_license_is_shown_as_custom():
     signal = license_signal(make_repo(license={"spdx_id": "NOASSERTION", "name": "Other"}))
     assert signal.value == "Custom"
@@ -96,6 +102,19 @@ def test_bus_factor_is_a_risk_when_one_person_wrote_every_recent_commit():
     signal = bus_factor_signal(make_repo(), commits_by("alice", "alice"), NOW)
     assert signal.status == RISK
     assert signal.value == "alice wrote all 2 commits"
+
+
+def test_bus_factor_solo_with_thin_evidence_says_so():
+    signal = bus_factor_signal(make_repo(), commits_by("alice", "alice"), NOW)
+    assert signal.detail.endswith("Only 2 commits in the last year, so the evidence is thin.")
+    one = bus_factor_signal(make_repo(), commits_by("alice"), NOW)
+    assert one.detail.endswith("Only 1 commit in the last year, so the evidence is thin.")
+
+
+def test_bus_factor_solo_with_enough_commits_has_no_thin_note():
+    signal = bus_factor_signal(make_repo(), commits_by(*["alice"] * 5), NOW)
+    assert signal.status == RISK
+    assert "evidence is thin" not in signal.detail
 
 
 def test_bus_factor_wording_for_a_single_commit():
