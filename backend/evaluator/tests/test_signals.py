@@ -92,8 +92,23 @@ def test_bus_factor_groups_commits_without_a_github_account_by_name():
     assert signal.value.startswith("Anonymous Dev")
 
 
-def test_bus_factor_is_unknown_with_too_few_commits():
-    assert bus_factor_signal(make_repo(), commits_by("alice", "alice"), NOW).status == UNKNOWN
+def test_bus_factor_is_a_risk_when_one_person_wrote_every_recent_commit():
+    signal = bus_factor_signal(make_repo(), commits_by("alice", "alice"), NOW)
+    assert signal.status == RISK
+    assert signal.value == "alice wrote all 2 commits"
+
+
+def test_bus_factor_wording_for_a_single_commit():
+    assert bus_factor_signal(make_repo(), commits_by("alice"), NOW).value == "alice wrote the only commit"
+
+
+def test_bus_factor_is_unknown_with_few_commits_from_several_people():
+    assert bus_factor_signal(make_repo(), commits_by("alice", "alice", "bob"), NOW).status == UNKNOWN
+
+
+def test_bus_factor_is_unknown_without_recent_human_commits():
+    commits = [make_commit(400, "alice"), make_commit(5, "dependabot[bot]", user_type="Bot")]
+    assert bus_factor_signal(make_repo(), commits, NOW).status == UNKNOWN
 
 
 def issues_with(unanswered: int, answered: int, days_ago: float = 30) -> list[dict]:

@@ -17,6 +17,7 @@ def signal(signal_id: str, status: str) -> Signal:
         ({"activity": RISK, "issues": RISK}, "high"),
         ({"status": RISK}, "high"),
         ({"license": RISK}, "high"),
+        ({"bus_factor": RISK}, "high"),
         ({"activity": UNKNOWN, "issues": UNKNOWN, "bus_factor": UNKNOWN}, "low"),
     ],
 )

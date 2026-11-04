@@ -162,6 +162,19 @@ def bus_factor_signal(repo: dict, commits: list[dict], now: datetime) -> Signal:
         author = _commit_author(commit)
         if author is not None and _commit_time(commit) >= cutoff:
             authors.append(author)
+    counts = Counter(authors)
+    if len(counts) == 1:
+        # One person behind every recent commit is the regret Simfoni named, however few commits there are.
+        author, total = counts.most_common(1)[0]
+        written = "the only commit" if total == 1 else f"all {total} commits"
+        return Signal(
+            "bus_factor",
+            "Bus factor",
+            RISK,
+            f"{author} wrote {written}",
+            "One person wrote every commit in the last year. If they step away, nobody else knows the code.",
+            url,
+        )
     if len(authors) < MIN_SAMPLE:
         return Signal(
             "bus_factor",
@@ -171,7 +184,6 @@ def bus_factor_signal(repo: dict, commits: list[dict], now: datetime) -> Signal:
             "Too few commits in the last year to tell who maintains it.",
             url,
         )
-    counts = Counter(authors)
     top_author, top_count = counts.most_common(1)[0]
     share = top_count / len(authors)
     value = f"{top_author} wrote {share:.0%} of {len(authors)} commits"
@@ -292,7 +304,8 @@ def build_signals(
     ]
 
 
-DEALBREAKERS = frozenset({"status", "license"})
+# Archived, unlicensed, or carried by one person: Simfoni's "single person" regret is a dealbreaker too.
+DEALBREAKERS = frozenset({"status", "license", "bus_factor"})
 HEADLINES = {"low": "Low regret risk", "medium": "Medium regret risk", "high": "High regret risk"}
 
 
