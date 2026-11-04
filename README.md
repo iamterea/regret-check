@@ -1,6 +1,6 @@
 # Regret Check
 
-Will we regret adopting this open-source dependency in two years? Paste a GitHub repository and get an explained risk report built from GitHub's public API, or up to four to compare side by side.
+Will we regret adopting this open-source dependency in two years? Paste a GitHub repository, or up to four to compare side by side, and get an explained risk report built from GitHub's public API.
 
 ## What "will we regret this" means
 
