@@ -11,15 +11,17 @@ Constraints from the brief: React + TypeScript frontend, Python + Django backend
 
 ## Answers from Simfoni (2026-11-04)
 
-1. **Who and when:** "More for leads or teams exploring packages to use for functionality and want to use only good, maintained ones." Changed: the tool compares 2-4 repositories side by side, lowest risk first.
+1. **Who and when:** "More for leads or teams exploring packages to use for functionality and want to use only good, maintained ones." Changed: the tool compares 2–4 repositories side by side, lowest risk first.
 2. **What went wrong before:** "The dependency on single person can lead to less updates or sometimes no updates." Changed: `bus_factor` is a dealbreaker (`risk` makes the verdict `high`), and when every human commit of the last year comes from one person that is `risk` however few commits there are (before, under 5 commits was `unknown`).
-3. **Token:** "Yes, anything is fine here." Changed: deployments set `GITHUB_TOKEN` (already supported). Unauthenticated mode and its rate-limit handling stay.
+3. **Token:** "Yes, anything is fine here." Changed: when deployed, set `GITHUB_TOKEN` (already supported; there is no deployment yet). Unauthenticated mode and its rate-limit handling stay.
 
 ## Approach
 
 A risk report made of explained flags, not a score. Each signal has a status (`ok`, `watch`, `risk`, `unknown`), a short value, a plain-English explanation of why it matters, and a link to the GitHub page that proves it. A small rule set turns the flags into a verdict.
 
-Rejected: a weighted 0–100 score (the weights would be invented, and "why 73?" has no honest answer); side-by-side comparison, first cut for scope (several times the API cost and a bigger UI) and added after Simfoni said the users are leads and teams choosing between packages.
+Rejected: a weighted 0–100 score (the weights would be invented, and "why 73?" has no honest answer).
+
+Side-by-side comparison was first cut for scope and added after Simfoni said the users are leads and teams choosing between packages.
 
 ## Signals
 
@@ -28,9 +30,9 @@ All windows are relative to "now" at evaluation time.
 | id | Label | Rule | Source |
 |---|---|---|---|
 | `status` | Archived | `archived` → `risk` (dealbreaker); otherwise `ok` | repo |
-| `license` | License | none → `risk` (dealbreaker); SPDX id in the permissive list → `ok`; anything else (copyleft, source-available, `NOASSERTION`) → `watch` with "check it fits a commercial product" | repo |
+| `license` | License | none detected → `risk` with value "Not detected" (not a dealbreaker); SPDX id in the permissive list → `ok`; anything else (copyleft, source-available, `NOASSERTION`) → `watch` with "check it fits a commercial product" | repo |
 | `activity` | Recent activity | age of the newest commit on the default branch: ≤ 90 days `ok`, ≤ 365 days `watch`, > 365 days `risk`. The explanation notes that small "finished" libraries can be legitimately quiet. | commits |
-| `bus_factor` | Bus factor | among non-bot commits from the last 365 days in the newest 100 commits: one author only (at least 1 commit) → `risk`; otherwise fewer than 5 such commits → `unknown`; top author share ≥ 80% `risk`, ≥ 50% `watch`, else `ok`. | commits |
+| `bus_factor` | Bus factor | among non-bot commits from the last 365 days in the newest 100 commits: one author only (at least 1 commit) → `risk`, and with fewer than 5 commits the detail says the evidence is thin; otherwise fewer than 5 such commits → `unknown`; top author share ≥ 80% `risk`, ≥ 50% `watch`, else `ok` (dealbreaker). | commits |
 | `issues` | Issue response | among non-bot issues (PRs excluded) in the newest 100, those created ≥ 14 days ago: share that are still open with zero comments. ≤ 20% `ok`, ≤ 50% `watch`, > 50% `risk`. Fewer than 5 such issues, or issues disabled on the repo → `unknown`. | issues |
 | `releases` | Releases | newest non-draft release: ≤ 365 days `ok`; older, or no releases → `watch` (never `risk`: some projects ship only tags or registry versions). | releases |
 
@@ -40,10 +42,11 @@ A commit or issue author is a bot when the GitHub user's `type` is `Bot` or the 
 
 ### Verdict
 
-- `high` if any dealbreaker (`status`, `license` or `bus_factor`) is `risk`, or if two or more signals are `risk`.
+- `high` if any dealbreaker (`status` or `bus_factor`) is `risk`, or if two or more signals are `risk`.
 - `medium` if exactly one signal is `risk`, or two or more are `watch`.
 - `low` otherwise.
 - `unknown` signals do not count.
+- `license` is not a dealbreaker: GitHub's detection misses some license files, so "Not detected" is a risk to verify by hand, not proof of no license.
 
 The verdict carries a headline ("Low regret risk", "Medium regret risk", "High regret risk") and `reasons`: the ids of `risk` signals, then the ids of `watch` signals, each group in signal-table order.
 
@@ -70,8 +73,10 @@ backend/                 Django 5.2, no database
 frontend/                Vite + React + TypeScript
   src/parseRepo.ts       "owner/name" or any github.com URL → owner/name
   src/api.ts             typed fetch wrappers, typed errors
-  src/components/        RepoForm, VerdictBanner, SignalCard, RateLimitNote
-  src/App.tsx            idle / loading / result / error states
+  src/errors.ts          describeError: shared wording for failed checks
+  src/status.ts          status labels (text, never colour alone)
+  src/components/        RepoForm, VerdictBanner, SignalCard, RateLimitNote, ComparisonTable
+  src/App.tsx            idle / loading / result / error / compared states
 ```
 
 Units and boundaries:
@@ -116,8 +121,10 @@ Errors (all JSON `{"error": <code>, "message": <text>}`):
 - One input that accepts `owner/name`, `https://github.com/owner/name`, `github.com/owner/name`, with or without `.git`, a trailing slash or extra path (`/tree/main`).
 - Example chips that show the range of verdicts: `atom/atom` (archived), `request/request` (deprecated but not archived: only the activity signal catches it), `moment/moment` (maintenance mode), `django/django` (healthy).
 - Result: verdict banner, then one card per signal, worst status first. Status is shown as a text label plus colour, never colour alone.
-- Rate-limit note: "41 of 60 GitHub requests left · resets at 14:32". A `stale` result shows "Showing cached data from <time>: GitHub's hourly limit is used up".
+- Rate-limit note: "41 of 60 GitHub requests left · resets at 14:32 · each repository checked uses up to 4". A `stale` result shows "Showing cached data from <time>: fresh data from GitHub wasn't available."
 - The input also takes up to 4 repositories separated by spaces, commas or new lines. 2–4 repositories render a comparison table (signals as rows, repositories as columns, lowest risk first, failed ones last with their error). "Details" under a column shows that repository's full report. A "Compare date libraries" example chip loads moment, date-fns, dayjs and luxon.
+- Comparison details: a stale column is labelled "Cached <time>"; a failed column shows the same wording as the single-check error (a rate-limited one includes the reset time); successful columns link GitHub's own name for the repository. The selected column's button reads "Showing details" (`aria-pressed`), and focus moves to the "Details: <repo>" heading above its report.
+- Cost: a comparison of four repositories costs up to 16 requests. The checks run in parallel, so near the limit one column can fail after spending some calls; what it fetched stays cached.
 - Error states: invalid input (inline, before any request), not found, rate limited (with reset time), GitHub error.
 
 ## Error handling
@@ -129,16 +136,16 @@ Errors (all JSON `{"error": <code>, "message": <text>}`):
 ## Testing
 
 - Backend, pytest + `responses` (no real network): signal rules at each threshold boundary, verdict rules, client cache/stale/rate-limit paths, view status codes.
-- Frontend, vitest + Testing Library: `parseRepo` cases, `App` happy path and rate-limited path with `fetch` mocked.
-- One manual end-to-end run against the real API with the four example repos.
+- Frontend, vitest + Testing Library: `parseRepo` cases, `App` happy path and rate-limited path with `fetch` mocked, and comparison tests (ordering, failed/stale/rate-limited columns, details focus).
+- One manual end-to-end run against the real API with the four example repos, and a live run of the date-library comparison (see the README).
 
 ## Deliberately cut
 
 Package-registry data (npm/PyPI downloads, dependents); vulnerability/CVE data; license-change history; auth and a database; ETag revalidation (no quota benefit without a token, measured).
 
-## Deployment (optional, last)
+## Deployment (not built)
 
-One Docker image: Node stage builds the frontend, Python stage serves the API and the built files with WhiteNoise via gunicorn. Deployable to Render, Railway or Fly. Skip if it costs more than 30 minutes.
+A Dockerfile was drafted but not verified (Docker Hub pulls stalled) and is not in the repository. When deployed, set `GITHUB_TOKEN`. The plan was one Docker image: Node stage builds the frontend, Python stage serves the API and the built files with WhiteNoise via gunicorn. Deployable to Render, Railway or Fly.
 
 ## Open questions
 
