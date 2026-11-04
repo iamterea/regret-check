@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from .github_client import GitHubClient, RateLimited
+from .github_client import GitHubClient, GitHubError, RateLimited
 from .signals import build_signals, decide_verdict
 
 
@@ -24,14 +24,19 @@ def _endpoints(full_name: str) -> dict[str, tuple[str, dict | None]]:
 
 def evaluate(full_name: str, client: GitHubClient, now: datetime) -> dict:
     endpoints = _endpoints(full_name)
-    budget = client.rate_limit()
+    # /rate_limit is free but can fail on its own. A fully cached evaluation needs no
+    # requests, so an unreadable budget only means "answer from the cache".
+    try:
+        budget = client.rate_limit()
+    except GitHubError:
+        budget = None
     # An upper bound: the issues call is counted even for repos with issues disabled, because
     # that is only known after the repo call. Over-counting can refuse at exactly 3 remaining;
     # under-counting could spend calls and then fail.
     needed = sum(not client.is_fresh(path, params) for path, params in endpoints.values())
     # Not enough budget for the uncached calls: answer from the cache or not at all,
     # rather than spend half the calls and then fail.
-    offline = needed > budget.remaining
+    offline = budget is None or needed > budget.remaining
 
     def fetch(name: str):
         path, params = endpoints[name]
@@ -39,6 +44,8 @@ def evaluate(full_name: str, client: GitHubClient, now: datetime) -> dict:
             return client.get(path, params)
         data = client.cached(path, params)
         if data is None:
+            if budget is None:
+                raise GitHubError("GitHub's rate limit could not be read and nothing is cached")
             raise RateLimited(budget.reset_at)
         return data
 
@@ -61,7 +68,9 @@ def evaluate(full_name: str, client: GitHubClient, now: datetime) -> dict:
         "meta": {
             "data_as_of": iso(datetime.fromtimestamp(oldest, tz=timezone.utc)) if oldest else iso(now),
             "stale": client.served_stale,
-            "rate_limit": {
+            "rate_limit": None
+            if budget is None
+            else {
                 "limit": budget.limit,
                 "remaining": max(budget.remaining - client.requests_made, 0),
                 "reset_at": iso(budget.reset_at),

@@ -30,7 +30,7 @@ def evaluate_view(request):
     except NotFound:
         return _error(404, "not_found", f"{full_name} does not exist or is private.")
     except RateLimited as exc:
-        return _error(429, "rate_limited", "GitHub's hourly request limit is used up.", reset_at=iso(exc.reset_at))
+        return _error(429, "rate_limited", "Not enough GitHub requests left for a new check.", reset_at=iso(exc.reset_at))
     except GitHubError:
         return _error(502, "github_error", "GitHub did not respond as expected. Try again shortly.")
     return JsonResponse(result)

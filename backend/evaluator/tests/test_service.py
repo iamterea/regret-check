@@ -1,7 +1,7 @@
 import pytest
 import responses
 
-from evaluator.github_client import GitHubClient, RateLimited
+from evaluator.github_client import GitHubClient, GitHubError, RateLimited
 from evaluator.service import evaluate
 from evaluator.tests.factories import API, NOW, FakeClock, make_repo, mock_healthy_repo, mock_rate_limit
 
@@ -93,3 +93,30 @@ def test_budget_check_counts_the_issues_call_before_it_knows_issues_are_disabled
         evaluate("acme/widget", make_client(memory_cache, FakeClock()), NOW)
 
     assert [call.request.url for call in responses.calls] == [f"{API}/rate_limit"]
+
+
+@responses.activate
+def test_unreadable_budget_still_serves_a_cached_evaluation(memory_cache):
+    clock = FakeClock()
+    mock_rate_limit(remaining=60)
+    mock_healthy_repo()
+    evaluate("acme/widget", make_client(memory_cache, clock), NOW)
+
+    clock.now += 7200
+    responses.reset()
+    responses.add(responses.GET, f"{API}/rate_limit", status=503)
+    result = evaluate("acme/widget", make_client(memory_cache, clock), NOW)
+
+    assert result["meta"]["stale"] is True
+    assert result["meta"]["rate_limit"] is None
+    assert [call.request.url for call in responses.calls] == [f"{API}/rate_limit"]
+
+
+@responses.activate
+def test_unreadable_budget_without_a_cache_is_a_github_error(memory_cache):
+    responses.add(responses.GET, f"{API}/rate_limit", status=503)
+
+    with pytest.raises(GitHubError) as caught:
+        evaluate("acme/widget", make_client(memory_cache, FakeClock()), NOW)
+
+    assert not isinstance(caught.value, RateLimited)

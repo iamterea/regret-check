@@ -66,6 +66,7 @@ def commits_by(*logins: str, days_ago: float = 10) -> list[dict]:
     [
         (["alice"] * 4 + ["bob"], RISK),  # top author 80%
         (["alice"] * 3 + ["bob", "carol"], WATCH),  # 60%
+        (["alice"] * 5 + ["bob", "carol", "dave", "erin", "frank"], WATCH),  # 50%
         (["alice", "alice", "bob", "carol", "dave"], OK),  # 40%
     ],
 )

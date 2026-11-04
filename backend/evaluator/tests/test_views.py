@@ -45,7 +45,7 @@ def test_no_budget_and_no_cache_is_429_with_reset_time(client):
     assert response.status_code == 429
     assert response.json() == {
         "error": "rate_limited",
-        "message": "GitHub's hourly request limit is used up.",
+        "message": "Not enough GitHub requests left for a new check.",
         "reset_at": "2030-03-17T17:46:40Z",
     }
 
