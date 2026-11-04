@@ -290,3 +290,26 @@ def build_signals(
         issues_signal(repo, issues, now),
         releases_signal(repo, releases, now),
     ]
+
+
+DEALBREAKERS = frozenset({"status", "license"})
+HEADLINES = {"low": "Low regret risk", "medium": "Medium regret risk", "high": "High regret risk"}
+
+
+@dataclass(frozen=True)
+class Verdict:
+    level: str
+    headline: str
+    reasons: list[str]
+
+
+def decide_verdict(signals: list[Signal]) -> Verdict:
+    risks = [s.id for s in signals if s.status == RISK]
+    watches = [s.id for s in signals if s.status == WATCH]
+    if (DEALBREAKERS & set(risks)) or len(risks) >= 2:
+        level = "high"
+    elif risks or len(watches) >= 2:
+        level = "medium"
+    else:
+        level = "low"
+    return Verdict(level, HEADLINES[level], risks + watches)
