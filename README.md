@@ -29,6 +29,7 @@ Bots such as Dependabot and Renovate are excluded from authorship and issue coun
 - **High** if the repo is archived or unlicensed, or if two signals are at risk.
 - **Medium** if one signal is at risk, or two need watching.
 - **Low** otherwise.
+- When two or more signals lack data, the page says the verdict rests on limited evidence.
 
 **Why flags and not a score.** A 0–100 score needs weights, and I had no data to choose them, so the precision would be fake. Every flag here comes with the reason it matters and a link to the GitHub page that proves it, so the reader can disagree with a specific flag instead of with a number.
 
@@ -46,11 +47,17 @@ Bots such as Dependabot and Renovate are excluded from authorship and issue coun
 ## Dealing with the 60 requests/hour limit
 
 - **Measured first.** Without a token, a conditional request that returns `304 Not Modified` still counts against the limit, so ETag caching saves nothing. `GET /rate_limit` is free. The design follows from those two facts.
-- **One check costs at most 4 requests:** repository, last 100 commits, last 10 releases, last 100 issues. Issues are skipped when the repo has them turned off.
+- **One check costs at most 4 requests:** repository, last 100 commits, last 10 releases, last 100 issues and pull requests (pull requests are filtered out). Issues are skipped when the repo has them turned off.
 - **Time-based cache.** Every GitHub response is cached per URL. For an hour (`GITHUB_CACHE_TTL_SECONDS`) a repeat check costs nothing.
-- **No half-spent checks.** Before a check the backend reads the free budget. If it can't afford the uncached calls, it answers from the cache (even a stale copy, clearly labelled with its age) or refuses with the reset time. It never spends two calls and then fails on the third.
+- **No half-spent checks.** Before a check the backend reads the free budget. If it can't afford the uncached calls, it answers from the cache (even a stale copy up to a week old, clearly labelled with its age) or refuses with the reset time, instead of starting a check it can't finish. If GitHub fails partway (another client on the same IP, an outage), responses already fetched stay cached, so a retry doesn't pay for them again. If the budget endpoint itself is down, it answers from the cache only.
 - **Visible budget.** The page shows how many requests are left and when the limit resets.
 - **Optional token.** Set `GITHUB_TOKEN` on the server to get 5,000 requests/hour. It never reaches the browser.
+
+## Working assumptions
+
+Three clarifying questions to Simfoni are open: who uses this and when, a dependency the team regretted, and whether a server-side GitHub token is acceptable. Until they are answered, the app assumes one engineer deciding about one library (adopt / think twice / avoid), that "regret" means nobody maintaining it when you need a fix or a license that doesn't fit, and that it must work without a token.
+
+Known limitation: for very busy repositories the newest 100 issues and pull requests can all be under two weeks old, so Issue response shows "Not enough data".
 
 ## What I deliberately cut
 
@@ -88,7 +95,7 @@ python3.12 -m venv .venv
 .venv/bin/python manage.py runserver 8000
 ```
 
-Frontend (Node 20+), in a second terminal:
+Frontend (Node 22.12+), in a second terminal:
 
 ```bash
 cd frontend

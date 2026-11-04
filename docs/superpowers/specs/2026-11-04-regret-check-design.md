@@ -1,7 +1,7 @@
 # Regret Check — design
 
 Date: 2026-11-04
-Status: approved in chat, pending Simfoni's answers to three clarifying questions (see "Open questions").
+Status: implemented on branch feature/regret-check. Built on working assumptions while three clarifying questions to Simfoni are open (see "Open questions").
 
 ## Problem
 
@@ -100,7 +100,7 @@ Cache: Django's `FileBasedCache` (shared across gunicorn workers on one host). T
 }
 ```
 
-`data_as_of` is when the oldest GitHub response used in the report was fetched (it differs from now when cached copies were used).
+`data_as_of` is when the oldest GitHub response used in the report was fetched (it differs from now when cached copies were used). `meta.rate_limit` is `null` when GitHub's `/rate_limit` endpoint could not be read; the evaluation then answers from the cache only.
 
 Errors (all JSON `{"error": <code>, "message": <text>}`):
 
