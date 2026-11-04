@@ -1,7 +1,7 @@
 # Regret Check — design
 
 Date: 2026-11-04
-Status: implemented on branch feature/regret-check. Built on working assumptions while three clarifying questions to Simfoni are open (see "Open questions").
+Status: implemented on branch feature/regret-check; updated 2026-11-04 with Simfoni's answers.
 
 ## Problem
 
@@ -9,19 +9,17 @@ A team is about to adopt an open-source dependency. Today the decision is a gut 
 
 Constraints from the brief: React + TypeScript frontend, Python + Django backend, GitHub public API as the data source, unauthenticated limit of 60 requests/hour, one-evening scope. Assessed on product judgment first, implementation quality second. Completeness is not assessed.
 
-## Working assumptions
+## Answers from Simfoni (2026-11-04)
 
-These stand in for the unanswered clarifying questions. If Simfoni's answers differ, revisit the matching section.
-
-1. **User and moment:** an engineer deciding about one library: adopt / think twice / avoid. Not a side-by-side comparison.
-2. **What "regret" means:** in two years we need a fix and nobody is maintaining the project, or the license turns out not to fit a commercial product.
-3. **Auth:** works with no token. An optional `GITHUB_TOKEN` env var on the server raises the limit to 5,000/hour; the token never reaches the browser.
+1. **Who and when:** "More for leads or teams exploring packages to use for functionality and want to use only good, maintained ones." Changed: the tool compares 2-4 repositories side by side, lowest risk first.
+2. **What went wrong before:** "The dependency on single person can lead to less updates or sometimes no updates." Changed: `bus_factor` is a dealbreaker (`risk` makes the verdict `high`), and when every human commit of the last year comes from one person that is `risk` however few commits there are (before, under 5 commits was `unknown`).
+3. **Token:** "Yes, anything is fine here." Changed: deployments set `GITHUB_TOKEN` (already supported). Unauthenticated mode and its rate-limit handling stay.
 
 ## Approach
 
 A risk report made of explained flags, not a score. Each signal has a status (`ok`, `watch`, `risk`, `unknown`), a short value, a plain-English explanation of why it matters, and a link to the GitHub page that proves it. A small rule set turns the flags into a verdict.
 
-Rejected: a weighted 0–100 score (the weights would be invented, and "why 73?" has no honest answer); side-by-side comparison of 2–3 repos (3× the API cost and 2× the UI; listed as next step).
+Rejected: a weighted 0–100 score (the weights would be invented, and "why 73?" has no honest answer); side-by-side comparison, first cut for scope (several times the API cost and a bigger UI) and added after Simfoni said the users are leads and teams choosing between packages.
 
 ## Signals
 
@@ -32,7 +30,7 @@ All windows are relative to "now" at evaluation time.
 | `status` | Archived | `archived` → `risk` (dealbreaker); otherwise `ok` | repo |
 | `license` | License | none → `risk` (dealbreaker); SPDX id in the permissive list → `ok`; anything else (copyleft, source-available, `NOASSERTION`) → `watch` with "check it fits a commercial product" | repo |
 | `activity` | Recent activity | age of the newest commit on the default branch: ≤ 90 days `ok`, ≤ 365 days `watch`, > 365 days `risk`. The explanation notes that small "finished" libraries can be legitimately quiet. | commits |
-| `bus_factor` | Bus factor | among non-bot commits from the last 365 days in the newest 100 commits: share of the top author ≥ 80% `risk`, ≥ 50% `watch`, else `ok`. Fewer than 5 such commits → `unknown`. | commits |
+| `bus_factor` | Bus factor | among non-bot commits from the last 365 days in the newest 100 commits: one author only (at least 1 commit) → `risk`; otherwise fewer than 5 such commits → `unknown`; top author share ≥ 80% `risk`, ≥ 50% `watch`, else `ok`. | commits |
 | `issues` | Issue response | among non-bot issues (PRs excluded) in the newest 100, those created ≥ 14 days ago: share that are still open with zero comments. ≤ 20% `ok`, ≤ 50% `watch`, > 50% `risk`. Fewer than 5 such issues, or issues disabled on the repo → `unknown`. | issues |
 | `releases` | Releases | newest non-draft release: ≤ 365 days `ok`; older, or no releases → `watch` (never `risk`: some projects ship only tags or registry versions). | releases |
 
@@ -42,7 +40,7 @@ A commit or issue author is a bot when the GitHub user's `type` is `Bot` or the 
 
 ### Verdict
 
-- `high` if any dealbreaker (`status` or `license`) is `risk`, or if two or more signals are `risk`.
+- `high` if any dealbreaker (`status`, `license` or `bus_factor`) is `risk`, or if two or more signals are `risk`.
 - `medium` if exactly one signal is `risk`, or two or more are `watch`.
 - `low` otherwise.
 - `unknown` signals do not count.
@@ -119,6 +117,7 @@ Errors (all JSON `{"error": <code>, "message": <text>}`):
 - Example chips that show the range of verdicts: `atom/atom` (archived), `request/request` (deprecated but not archived: only the activity signal catches it), `moment/moment` (maintenance mode), `django/django` (healthy).
 - Result: verdict banner, then one card per signal, worst status first. Status is shown as a text label plus colour, never colour alone.
 - Rate-limit note: "41 of 60 GitHub requests left · resets at 14:32". A `stale` result shows "Showing cached data from <time>: GitHub's hourly limit is used up".
+- The input also takes up to 4 repositories separated by spaces, commas or new lines. 2–4 repositories render a comparison table (signals as rows, repositories as columns, lowest risk first, failed ones last with their error). "Details" under a column shows that repository's full report. A "Compare date libraries" example chip loads moment, date-fns, dayjs and luxon.
 - Error states: invalid input (inline, before any request), not found, rate limited (with reset time), GitHub error.
 
 ## Error handling
@@ -135,14 +134,12 @@ Errors (all JSON `{"error": <code>, "message": <text>}`):
 
 ## Deliberately cut
 
-Side-by-side comparison; package-registry data (npm/PyPI downloads, dependents); vulnerability/CVE data; license-change history; auth and a database; ETag revalidation (no quota benefit without a token, measured).
+Package-registry data (npm/PyPI downloads, dependents); vulnerability/CVE data; license-change history; auth and a database; ETag revalidation (no quota benefit without a token, measured).
 
 ## Deployment (optional, last)
 
 One Docker image: Node stage builds the frontend, Python stage serves the API and the built files with WhiteNoise via gunicorn. Deployable to Render, Railway or Fly. Skip if it costs more than 30 minutes.
 
-## Open questions (sent to Simfoni)
+## Open questions
 
-1. Who uses the tool and when: single go/no-go vs comparing candidates?
-2. A dependency the team regretted, and what went wrong?
-3. Is a server-side GitHub token acceptable, or must it work unauthenticated?
+Answered — see "Answers from Simfoni".

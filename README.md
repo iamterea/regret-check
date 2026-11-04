@@ -18,7 +18,7 @@ Stars and downloads tell you a library is popular today. They say little about w
 | Archived | the repository is archived | – |
 | License | there is no license | copyleft, source-available or custom |
 | Recent activity | no commit for over a year | no commit for over 90 days |
-| Bus factor | one person wrote ≥ 80% of last year's human commits | ≥ 50% |
+| Bus factor | one person wrote ≥ 80% of last year's human commits, or all of them however few | ≥ 50% |
 | Issue response | > 50% of issues older than two weeks are open with no reply | > 20% |
 | Releases | – | no release in a year, or no releases at all |
 
@@ -26,10 +26,12 @@ Bots such as Dependabot and Renovate are excluded from authorship and issue coun
 
 ### How the verdict is decided
 
-- **High** if the repo is archived or unlicensed, or if two signals are at risk.
+- **High** if the repo is archived, unlicensed or carried by one person, or if two signals are at risk.
 - **Medium** if one signal is at risk, or two need watching.
 - **Low** otherwise.
 - When two or more signals lack data, the page says the verdict rests on limited evidence.
+
+**Why one person is a dealbreaker.** Simfoni said the dependency they regret is the one that hangs on a single person: updates slow down or stop. So a project whose recent commits all come from one person is high risk, even if it is active today.
 
 **Why flags and not a score.** A 0–100 score needs weights, and I had no data to choose them, so the precision would be fake. Every flag here comes with the reason it matters and a link to the GitHub page that proves it, so the reader can disagree with a specific flag instead of with a number.
 
@@ -44,6 +46,15 @@ Bots such as Dependabot and Renovate are excluded from authorship and issue coun
 | request/request | High regret risk | Recent activity (risk), Bus factor (unknown), Issue response (risk), Releases (watch) |
 | atom/atom | High regret risk | Archived (risk), Recent activity (risk), Bus factor (unknown), Issue response (risk), Releases (watch) |
 
+### Example comparison: date libraries (checked 2026-11-04)
+
+| Repository | Verdict | Flags |
+|---|---|---|
+| iamkun/dayjs | Low regret risk | Bus factor (watch), Issue response (unknown) |
+| moment/moment | Medium regret risk | Bus factor (watch), Issue response (watch) |
+| moment/luxon | Medium regret risk | Issue response (watch), Releases (watch) |
+| date-fns/date-fns | High regret risk | License (risk), Bus factor (risk), Issue response (risk) |
+
 ## Dealing with the 60 requests/hour limit
 
 - **Measured first.** Without a token, a conditional request that returns `304 Not Modified` still counts against the limit, so ETag caching saves nothing. `GET /rate_limit` is free. The design follows from those two facts.
@@ -51,17 +62,22 @@ Bots such as Dependabot and Renovate are excluded from authorship and issue coun
 - **Time-based cache.** Every GitHub response is cached per URL. For an hour (`GITHUB_CACHE_TTL_SECONDS`) a repeat check costs nothing.
 - **No half-spent checks.** Before a check the backend reads the free budget. If it can't afford the uncached calls, it answers from the cache (even a stale copy up to a week old, clearly labelled with its age) or refuses with the reset time, instead of starting a check it can't finish. If GitHub fails partway (another client on the same IP, an outage), responses already fetched stay cached, so a retry doesn't pay for them again. If the budget endpoint itself is down, it answers from the cache only.
 - **Visible budget.** The page shows how many requests are left and when the limit resets.
-- **Optional token.** Set `GITHUB_TOKEN` on the server to get 5,000 requests/hour. It never reaches the browser.
+- **Token.** Simfoni confirmed a server-side token is fine: set GITHUB_TOKEN when deploying to get 5,000 requests/hour. It never reaches the browser. Everything above keeps the app usable without one.
 
-## Working assumptions
+## What Simfoni told me
 
-Three clarifying questions to Simfoni are open: who uses this and when, a dependency the team regretted, and whether a server-side GitHub token is acceptable. Until they are answered, the app assumes one engineer deciding about one library (adopt / think twice / avoid), that "regret" means nobody maintaining it when you need a fix or a license that doesn't fit, and that it must work without a token.
+I asked three questions before building. The answers changed the product:
+
+| Question | Answer | What changed |
+|---|---|---|
+| Who uses this, and when? | Leads or teams exploring packages for some functionality, who want only good, maintained ones. | You can compare up to 4 repositories side by side, lowest risk first. |
+| What went wrong with a dependency before? | Dependence on a single person: fewer updates, sometimes none. | Bus factor is a dealbreaker. A project carried by one person is high risk. |
+| Is a server-side GitHub token OK? | Yes. | Deployments set `GITHUB_TOKEN` (5,000 requests/hour). Without it the app still works within 60/hour. |
 
 Known limitation: for very busy repositories the newest 100 issues and pull requests can all be under two weeks old, so Issue response shows "Not enough data".
 
 ## What I deliberately cut
 
-- **Comparing two or three candidates side by side.** Useful, but triples the API cost and doubles the UI.
 - **Package-registry data** (npm/PyPI downloads, dependents) and **vulnerability data.** Worth having, but they are other APIs and the brief says GitHub.
 - **License-change history.** Catching "MIT last year, BSL now" needs the history of the license file, so several calls per check.
 - **Auth, a database, ETag revalidation.** Not needed for the core question. ETags were dropped after measuring that they don't save quota without a token.
@@ -70,8 +86,7 @@ Known limitation: for very busy repositories the newest 100 issues and pull requ
 
 1. Calibrate thresholds on a list of dependencies people regretted, and on ones they didn't.
 2. Measure time to first *maintainer* reply instead of "issue with no comments". That needs comments per issue, so a token.
-3. Side-by-side comparison for "which of these should we pick".
-4. Add OpenSSF Scorecard and deps.dev for security practices and real-world dependents.
+3. Add OpenSSF Scorecard and deps.dev for security practices and real-world dependents.
 
 ## How I used AI tools
 
@@ -125,5 +140,6 @@ backend/evaluator/github_client.py  HTTP, cache, rate-limit handling
 backend/evaluator/service.py        one evaluation: budget check, fetches, report
 backend/evaluator/views.py          GET /api/evaluate?repo=owner/name, GET /api/rate-limit
 frontend/src/                       React + TypeScript UI
+frontend/src/components/ComparisonTable.tsx  side-by-side comparison
 docs/superpowers/                   design spec and implementation plan
 ```
