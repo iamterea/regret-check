@@ -101,16 +101,20 @@ I asked three questions before building. The answers changed the product:
 
 ## How I used AI tools
 
-I used Claude Code (Claude Opus 5.5) throughout:
+I used Claude Code (Claude Opus 5.5, with Sonnet and Haiku subagents) for the whole project, from reading the brief to reviewing the final results. The split was simple: Claude did the exploring, drafting and code generation, I made the decisions.
 
-- It read the brief and drafted the clarifying questions; I chose what to ask.
-- It proposed three approaches (explained flags, a weighted score, side-by-side comparison) along with the signals and thresholds. I picked the flags approach and approved the design (`docs/superpowers/specs/`).
-- It found by measurement that unauthenticated `304`s still count against the limit, which changed the caching design.
-- It wrote the implementation plan (`docs/superpowers/plans/`) and generated the code task by task with subagents, with a review after each task.
+Concretely:
 
-My part: deciding what to build and what to cut, the final call on signals and thresholds, reviewing the code and the results, and the reasoning in this README.
+- **The brief.** Claude read the task and drafted a list of clarifying questions. I went through it, dropped the ones that didn't matter for this scope and picked what to actually ask.
+- **The approach.** Claude proposed three ways to present the result: explained flags, a single weighted score, and a side-by-side comparison, each with suggested signals and thresholds. I went with flags, because a list of concrete reasons is easier to trust and easier to argue with than one number. I approved the design in `docs/superpowers/specs/`.
+- **The rate-limit surprise.** While measuring GitHub API behaviour, Claude found that unauthenticated `304` responses still count against the request limit. That's not obvious from the docs and it changed the caching design: conditional requests alone don't save budget without a token, so the cache ended up built around a TTL and a request budget instead of ETags.
+- **Plan and code.** Claude wrote the implementation plan (`docs/superpowers/plans/`) as a sequence of small tasks, then generated the code task by task with subagents. Each task got a review pass against the plan and spec before the next one started, which kept the code close to the design.
+
+My part was everything that needed judgement rather than generation: what to build and what to cut, the final call on signals and thresholds, reviewing the code and how it behaves on real repositories, and the reasoning in this README. Where Claude and I disagreed, what shipped is what I chose.
 
 ## Running it locally
+
+Two parts: a Django backend that talks to GitHub and a React frontend that renders the report. In development they run as separate processes.
 
 Backend (Python 3.12):
 
@@ -129,9 +133,17 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Vite proxies `/api` to the backend on port 8000. If port 8000 is taken, run the backend on another port and point Vite at it: `API_URL=http://127.0.0.1:8765 npm run dev`.
+Open http://localhost:5173. Vite proxies everything under `/api` to the backend on port 8000, so the frontend doesn't need to know the backend address. If 8000 is taken, run the backend elsewhere and point Vite at it:
 
-Optional environment variables for the backend: `GITHUB_TOKEN`, `GITHUB_CACHE_TTL_SECONDS` (default 3600), `CACHE_DIR`.
+```bash
+API_URL=http://127.0.0.1:8765 npm run dev
+```
+
+Optional backend environment variables:
+
+- `GITHUB_TOKEN`: without it you get the unauthenticated limit of 60 requests per hour, about 15 fresh checks (cached ones are free). Enough to try it out; a team using it day to day should set a token.
+- `GITHUB_CACHE_TTL_SECONDS`: how long GitHub responses are reused. Default 3600.
+- `CACHE_DIR`: where cache files go. Defaults to `backend/.cache`; the Docker image uses `/tmp/regret-check-cache`.
 
 Tests:
 
@@ -143,16 +155,20 @@ cd backend && .venv/bin/python -m pytest
 cd frontend && npm test
 ```
 
+Backend tests cover the signal rules, the cache and rate-limit handling with mocked GitHub responses (hand-built payloads served by the `responses` library), so they don't need network access. Frontend tests cover report rendering and error states.
+
 ## Deploying
 
-One Docker image serves both the UI and the API:
+For deployment both parts go into one Docker image: the frontend is built to static files and served by the same process that exposes the API. One container, one port.
 
 ```bash
 docker build -t regret-check .
 docker run -p 8000:8000 -e DJANGO_SECRET_KEY=change-me regret-check
 ```
 
-On Render: New → Blueprint → this repository. Render reads `render.yaml`, generates `DJANGO_SECRET_KEY` and asks for `GITHUB_TOKEN`: a fine-grained token with read-only access to public repositories is enough. Railway and Fly pick up the same Dockerfile. The cache lives in `/tmp`, so it resets on each deploy, and Render's free instances sleep when idle, so the first request after a pause is slow.
+On Render: New → Blueprint → this repository. Render reads `render.yaml`, generates `DJANGO_SECRET_KEY` itself and asks for `GITHUB_TOKEN`. A fine-grained token with read-only access to public repositories is enough; the app never writes to GitHub. Railway and Fly work off the same Dockerfile.
+
+Two things about the hosted version. The cache lives in `/tmp`, so it resets on every deploy and the first evaluations afterwards are slower. And Render's free instances sleep when idle, so the first request after a pause takes a while. Neither affects correctness, only speed.
 
 ## Project layout
 
@@ -166,3 +182,5 @@ frontend/src/components/ComparisonTable.tsx  side-by-side comparison
 frontend/src/errors.ts                       shared error wording
 docs/superpowers/                            design spec and implementation plan
 ```
+
+The backend split is deliberate. `signals.py` has no I/O, just functions from fetched data to signals and a verdict, so it's easy to test and holds most of the product logic. `github_client.py` is the only place that talks HTTP to GitHub, caches responses and reads rate-limit headers. `service.py` ties them together for one evaluation and is the one place that knows which endpoints are called. To change what counts as a warning sign, touch `signals.py`; to change which GitHub endpoints are used, `service.py`; for HTTP, caching or rate limits, `github_client.py`.
