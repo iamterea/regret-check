@@ -2,6 +2,8 @@
 
 Will we regret adopting this open-source dependency in two years? Paste a GitHub repository, or up to four to compare side by side, and get an explained risk report built from GitHub's public API.
 
+**Demo video (4:35):** [docs/regret-check-demo.mp4](docs/regret-check-demo.mp4), a walkthrough with voice-over, then one decision I'm not certain about.
+
 ## What "will we regret this" means
 
 Two years after adopting a library, regret usually comes from one of two places:
