@@ -13,7 +13,7 @@ Constraints from the brief: React + TypeScript frontend, Python + Django backend
 
 1. **Who and when:** "More for leads or teams exploring packages to use for functionality and want to use only good, maintained ones." Changed: the tool compares 2–4 repositories side by side, lowest risk first.
 2. **What went wrong before:** "The dependency on single person can lead to less updates or sometimes no updates." Changed: `bus_factor` is a dealbreaker (`risk` makes the verdict `high`), and when every human commit of the last year comes from one person that is `risk` however few commits there are (before, under 5 commits was `unknown`).
-3. **Token:** "Yes, anything is fine here." Changed: when deployed, set `GITHUB_TOKEN` (already supported; there is no deployment yet). Unauthenticated mode and its rate-limit handling stay.
+3. **Token:** "Yes, anything is fine here." Changed: when deployed, set `GITHUB_TOKEN` (already supported; `render.yaml` asks for it). Unauthenticated mode and its rate-limit handling stay.
 
 ## Approach
 
@@ -143,9 +143,9 @@ Errors (all JSON `{"error": <code>, "message": <text>}`):
 
 Package-registry data (npm/PyPI downloads, dependents); vulnerability/CVE data; license-change history; auth and a database; ETag revalidation (no quota benefit without a token, measured).
 
-## Deployment (not built)
+## Deployment
 
-A Dockerfile was drafted but not verified (Docker Hub pulls stalled) and is not in the repository. When deployed, set `GITHUB_TOKEN`. The plan was one Docker image: Node stage builds the frontend, Python stage serves the API and the built files with WhiteNoise via gunicorn. Deployable to Render, Railway or Fly.
+One Docker image: a Node stage builds the frontend, a Python stage serves the API and the built files with WhiteNoise via gunicorn (2 workers × 4 threads, so a 4-repository comparison runs in parallel). `render.yaml` is a Render Blueprint: it generates `DJANGO_SECRET_KEY` and asks for `GITHUB_TOKEN`. The same Dockerfile works on Railway or Fly. Built and checked locally on 2026-11-05; not deployed yet.
 
 ## Open questions
 

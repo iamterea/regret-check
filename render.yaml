@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: regret-check
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: GITHUB_TOKEN
+        sync: false

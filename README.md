@@ -143,6 +143,17 @@ cd backend && .venv/bin/python -m pytest
 cd frontend && npm test
 ```
 
+## Deploying
+
+One Docker image serves both the UI and the API:
+
+```bash
+docker build -t regret-check .
+docker run -p 8000:8000 -e DJANGO_SECRET_KEY=change-me regret-check
+```
+
+On Render: New → Blueprint → this repository. Render reads `render.yaml`, generates `DJANGO_SECRET_KEY` and asks for `GITHUB_TOKEN`: a fine-grained token with read-only access to public repositories is enough. Railway and Fly pick up the same Dockerfile. The cache lives in `/tmp`, so it resets on each deploy, and Render's free instances sleep when idle, so the first request after a pause is slow.
+
 ## Project layout
 
 ```
